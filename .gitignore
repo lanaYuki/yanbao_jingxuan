@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# 上传和输出目录（运行时生成，不入库）
+uploads/
+output/
+
+# 研报源文件（含敏感内容，不入库）
+*.docx
+*.pdf
+
+# 但保留模板文件（项目必需）
+!CGI每周研报精选（第259期）-摘要.docx
+!研报模版.docx
+
+# 系统文件
+.DS_Store
+*.swp
+*.swo
+
+# 环境变量
+.env

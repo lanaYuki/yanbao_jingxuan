@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>研报精选生成工具</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: #f5f5f5;
+      min-height: 100vh;
+      padding: 32px 24px;
+    }
+    h1 {
+      text-align: center;
+      font-size: 22px;
+      color: #1a1a1a;
+      margin-bottom: 28px;
+      font-weight: 600;
+    }
+    .issue-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+    .issue-row label { font-size: 15px; color: #444; }
+    .issue-row input {
+      width: 80px;
+      padding: 6px 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 15px;
+      text-align: center;
+    }
+    .articles-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+      max-width: 960px;
+      margin: 0 auto 28px;
+    }
+    .article-card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+      border: 2px dashed #ddd;
+      transition: border-color 0.2s;
+      position: relative;
+    }
+    .article-card.has-file {
+      border-style: solid;
+      border-color: #4a90d9;
+    }
+    .article-card.dragover { border-color: #2b6cb0; background: #f0f6ff; }
+    .card-header {
+      font-size: 13px;
+      color: #888;
+      margin-bottom: 12px;
+      font-weight: 500;
+    }
+    .drop-zone {
+      border: 1.5px dashed #bbb;
+      border-radius: 8px;
+      padding: 18px;
+      text-align: center;
+      cursor: pointer;
+      color: #999;
+      font-size: 13px;
+      margin-bottom: 14px;
+      transition: background 0.15s;
+    }
+    .drop-zone:hover { background: #f9f9f9; }
+    .drop-zone input[type=file] { display: none; }
+    .drop-zone.uploaded { border-color: #48bb78; color: #276749; background: #f0fff4; }
+    .file-name {
+      font-size: 12px;
+      color: #555;
+      margin-top: 6px;
+      word-break: break-all;
+    }
+    .field-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .field-row label { font-size: 12px; color: #666; }
+    .field-row input, .field-row textarea {
+      padding: 7px 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      width: 100%;
+    }
+    .field-row textarea { resize: vertical; min-height: 60px; }
+    .ai-badge {
+      display: inline-block;
+      background: #ebf4ff;
+      color: #2b6cb0;
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      margin-left: 6px;
+    }
+    .ai-loading { color: #999; font-size: 12px; margin-top: 4px; }
+    .info-row {
+      display: flex;
+      gap: 10px;
+      font-size: 12px;
+      color: #666;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .info-tag {
+      background: #f0f4ff;
+      padding: 2px 8px;
+      border-radius: 4px;
+      color: #4a5568;
+    }
+    .btn-generate {
+      display: block;
+      margin: 0 auto;
+      padding: 13px 48px;
+      background: #2b6cb0;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    .btn-generate:hover:not(:disabled) { background: #2c5282; }
+    .btn-generate:disabled { background: #a0aec0; cursor: not-allowed; }
+    .result-box {
+      max-width: 960px;
+      margin: 24px auto 0;
+      padding: 18px 24px;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+      display: none;
+    }
+    .result-box.success { border-left: 4px solid #48bb78; }
+    .result-box.error { border-left: 4px solid #fc8181; }
+    .result-box h3 { font-size: 15px; margin-bottom: 10px; }
+    .btn-download {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 9px 24px;
+      background: #48bb78;
+      color: #fff;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .spinner {
+      display: inline-block;
+      width: 12px; height: 12px;
+      border: 2px solid #ccc;
+      border-top-color: #4a90d9;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .summary-box {
+      margin-top: 8px;
+    }
+    .summary-box label {
+      font-size: 12px;
+      color: #666;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .char-count {
+      margin-left: auto;
+      font-size: 11px;
+      color: #999;
+      font-weight: normal;
+    }
+    .char-count.ok { color: #48bb78; }
+    .char-count.warn { color: #e53e3e; }
+    .summary-box textarea {
+      width: 100%;
+      min-height: 72px;
+      padding: 7px 10px;
+      border: 1px solid #f6e05e;
+      border-radius: 6px;
+      background: #fffbea;
+      font-size: 12px;
+      color: #744210;
+      font-family: inherit;
+      resize: vertical;
+      line-height: 1.5;
+    }
+    .summary-box textarea:focus {
+      outline: none;
+      border-color: #d69e2e;
+      background: #fff;
+      color: #1a1a1a;
+    }
+    .link-map-section {
+      max-width: 960px;
+      margin: 0 auto 24px;
+      background: #fff;
+      border-radius: 10px;
+      padding: 20px 24px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+    }
+    .link-map-section h3 {
+      font-size: 14px;
+      color: #444;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+    .link-map-section .hint {
+      font-size: 12px;
+      color: #999;
+      margin-bottom: 14px;
+    }
+    .link-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .link-row input {
+      flex: 1;
+      padding: 6px 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+    .link-row input.url-input { flex: 2; }
+    .btn-remove-link {
+      background: none;
+      border: none;
+      color: #aaa;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      padding: 0 4px;
+    }
+    .btn-remove-link:hover { color: #e53e3e; }
+    .btn-add-link {
+      background: none;
+      border: 1px dashed #bbb;
+      border-radius: 6px;
+      padding: 5px 14px;
+      font-size: 13px;
+      color: #666;
+      cursor: pointer;
+      margin-top: 4px;
+    }
+    .btn-add-link:hover { border-color: #4a90d9; color: #4a90d9; }
+
+    /* ── 研报清单功能 ── */
+    .list-section {
+      max-width: 960px;
+      margin: 48px auto 0;
+      padding-top: 32px;
+      border-top: 2px solid #e2e8f0;
+    }
+    .list-section h2 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin-bottom: 6px;
+    }
+    .list-section .section-hint {
+      font-size: 13px;
+      color: #888;
+      margin-bottom: 20px;
+    }
+    .list-cats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .list-cat-card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+    }
+    .list-cat-card h4 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #444;
+      margin-bottom: 8px;
+    }
+    .list-cat-card textarea {
+      width: 100%;
+      min-height: 100px;
+      padding: 8px 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 12px;
+      font-family: inherit;
+      resize: vertical;
+      color: #333;
+    }
+    .list-cat-card textarea:focus {
+      outline: none;
+      border-color: #4a90d9;
+    }
+    .btn-parse {
+      display: block;
+      margin: 0 auto 16px;
+      padding: 10px 36px;
+      background: #718096;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+    .btn-parse:hover { background: #4a5568; }
+    .parsed-preview {
+      max-width: 960px;
+      margin: 0 auto 16px;
+      display: none;
+    }
+    .parsed-cat-block {
+      background: #fff;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+    .parsed-cat-block h4 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #2b6cb0;
+      margin-bottom: 10px;
+    }
+    .parsed-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      background: #f7fafc;
+    }
+    .parsed-item input[type=text] {
+      flex: 1;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-family: inherit;
+    }
+    .parsed-item .date-input {
+      width: 90px;
+      flex: none;
+    }
+    .parsed-item-num {
+      display: none;
+    }
+    .btn-del-item {
+      background: none;
+      border: none;
+      color: #aaa;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 0 2px;
+    }
+    .btn-del-item:hover { color: #e53e3e; }
+    .btn-add-item {
+      background: none;
+      border: 1px dashed #bbb;
+      border-radius: 5px;
+      padding: 3px 12px;
+      font-size: 12px;
+      color: #666;
+      cursor: pointer;
+      margin-top: 4px;
+    }
+    .btn-add-item:hover { border-color: #4a90d9; color: #4a90d9; }
+    .list-note {
+      background: #fffbea;
+      border: 1px solid #f6e05e;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: #744210;
+      margin-bottom: 16px;
+      max-width: 960px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .btn-generate-list {
+      display: block;
+      margin: 0 auto;
+      padding: 13px 48px;
+      background: #38a169;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    .btn-generate-list:hover:not(:disabled) { background: #276749; }
+    .btn-generate-list:disabled { background: #a0aec0; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <h1>研报精选生成工具</h1>
+
+  <div class="issue-row">
+    <label>本期期号：第</label>
+    <input type="number" id="issueInput" placeholder="259" min="1">
+    <label>期</label>
+  </div>
+
+  <div class="articles-grid" id="articlesGrid">
+    <!-- 4个研报卡片由 JS 生成 -->
+  </div>
+
+  <!-- 超链接映射 -->
+  <div class="link-map-section">
+    <h3>超链接映射（可选）</h3>
+    <div class="hint">若正文中出现文章名需要替换为超链接，在此填写。文章名需与正文完全匹配。</div>
+    <div id="linkMapRows"></div>
+    <button class="btn-add-link" onclick="addLinkRow()">+ 添加文章名 → 链接</button>
+  </div>
+
+  <button class="btn-generate" id="btnGenerate" disabled onclick="generateJingxuan()">
+    生成研报精选
+  </button>
+
+  <div class="result-box" id="resultBox">
+    <h3 id="resultTitle"></h3>
+    <p id="resultMsg"></p>
+    <a id="resultLink" class="btn-download" style="display:none" href="#">下载精选 docx</a>
+  </div>
+
+  <script>
+    const NUM_ARTICLES = 4;
+    const state = {};  // file_id, section, summary per card
+
+    // 初始化4个卡片
+    function initCards() {
+      const grid = document.getElementById('articlesGrid');
+      for (let i = 0; i < NUM_ARTICLES; i++) {
+        state[i] = { file_id: null, section: '', summary: '', ai_polling: null };
+        grid.innerHTML += cardHTML(i);
+      }
+    }
+
+    function cardHTML(i) {
+      return `
+        <div class="article-card" id="card-${i}">
+          <div class="card-header">研报 ${i + 1}</div>
+          <div class="drop-zone" id="dz-${i}"
+               onclick="document.getElementById('file-${i}').click()"
+               ondragover="onDragOver(event, ${i})"
+               ondragleave="onDragLeave(event, ${i})"
+               ondrop="onDrop(event, ${i})">
+            <input type="file" id="file-${i}" accept=".docx" onchange="onFileChange(${i}, this.files[0])">
+            <div>拖拽或点击上传 .docx 文件</div>
+          </div>
+          <div class="field-row">
+            <label>栏目名 <span class="ai-badge" id="ai-section-badge-${i}" style="display:none">AI推荐</span></label>
+            <input type="text" id="section-${i}" placeholder="如：专题聚焦、宏观专栏…">
+          </div>
+          <div class="ai-loading" id="ai-status-${i}" style="display:none">
+            <span class="spinner"></span> AI 分析中…
+          </div>
+          <div class="info-row" id="info-row-${i}"></div>
+          <div class="summary-box" id="summary-box-${i}" style="display:none">
+            <label>📝 封面摘要（可编辑，将写入目录页）<span class="ai-badge">AI生成</span><span class="char-count" id="char-count-${i}"></span></label>
+            <textarea id="summary-${i}" placeholder="AI生成摘要，可直接编辑修改…" oninput="updateCharCount(${i})"></textarea>
+          </div>
+        </div>`;
+    }
+
+    function onDragOver(e, i) {
+      e.preventDefault();
+      document.getElementById(`dz-${i}`).classList.add('dragover');
+    }
+    function onDragLeave(e, i) {
+      document.getElementById(`dz-${i}`).classList.remove('dragover');
+    }
+    function onDrop(e, i) {
+      e.preventDefault();
+      document.getElementById(`dz-${i}`).classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file && file.name.endsWith('.docx')) onFileChange(i, file);
+    }
+
+    async function onFileChange(i, file) {
+      if (!file) return;
+      const dz = document.getElementById(`dz-${i}`);
+      dz.innerHTML = `<span class="spinner"></span> 上传解析中…`;
+
+      const fd = new FormData();
+      fd.append('file', file);
+
+      try {
+        const resp = await fetch('/analyze', { method: 'POST', body: fd });
+        const data = await resp.json();
+        if (data.error) { alert(data.error); return; }
+
+        state[i].file_id = data.file_id;
+        dz.classList.add('uploaded');
+        dz.innerHTML = `✓ ${file.name}`;
+        document.getElementById(`card-${i}`).classList.add('has-file');
+
+        // 显示基础信息
+        document.getElementById(`info-row-${i}`).innerHTML =
+          `<span class="info-tag">📄 ${data.title || '（无标题）'}</span>` +
+          `<span class="info-tag">📅 ${data.date}</span>` +
+          `<span class="info-tag">高亮段落 ${data.highlighted_count} 段</span>`;
+
+        // 启动 AI 轮询
+        document.getElementById(`ai-status-${i}`).style.display = 'block';
+        pollAI(i, data.file_id);
+        checkAllReady();
+      } catch (e) {
+        alert('上传失败：' + e.message);
+      }
+    }
+
+    function pollAI(cardIdx, file_id, attempts = 0) {
+      if (attempts > 30) return;  // 最多轮询 30 次（约30秒）
+      setTimeout(async () => {
+        const resp = await fetch(`/ai_result/${file_id}`);
+        const data = await resp.json();
+        if (data.ready) {
+          document.getElementById(`ai-status-${cardIdx}`).style.display = 'none';
+          // 填入推荐栏目
+          if (data.ai_section) {
+            const sectionInput = document.getElementById(`section-${cardIdx}`);
+            if (!sectionInput.value) {
+              sectionInput.value = data.ai_section;
+              document.getElementById(`ai-section-badge-${cardIdx}`).style.display = 'inline';
+            }
+          }
+          // 显示摘要编辑框
+          if (data.ai_summary) {
+            state[cardIdx].summary = data.ai_summary;
+            document.getElementById(`summary-box-${cardIdx}`).style.display = 'block';
+            document.getElementById(`summary-${cardIdx}`).value = data.ai_summary;
+            updateCharCount(cardIdx);
+          }
+        } else {
+          pollAI(cardIdx, file_id, attempts + 1);
+        }
+      }, 1000);
+    }
+
+    function checkAllReady() {
+      const allReady = Object.values(state).some(s => s.file_id !== null);
+      document.getElementById('btnGenerate').disabled = !allReady;
+    }
+
+    async function generateJingxuan() {
+      const issue = document.getElementById('issueInput').value.trim();
+      const articles = [];
+
+      for (let i = 0; i < NUM_ARTICLES; i++) {
+        if (!state[i].file_id) continue;
+        const section = document.getElementById(`section-${i}`).value.trim();
+        const summary = document.getElementById(`summary-${i}`)?.value?.trim() || '';
+        if (!section) {
+          alert(`请填写研报 ${i + 1} 的栏目名`);
+          return;
+        }
+        articles.push({ file_id: state[i].file_id, section, summary });
+      }
+
+      if (articles.length === 0) {
+        alert('请至少上传一篇研报');
+        return;
+      }
+
+      const btn = document.getElementById('btnGenerate');
+      btn.disabled = true;
+      btn.textContent = '生成中…';
+
+      try {
+        const resp = await fetch('/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ issue, articles, link_map: getLinkMap() }),
+        });
+        const data = await resp.json();
+
+        const box = document.getElementById('resultBox');
+        box.style.display = 'block';
+        if (data.success) {
+          box.className = 'result-box success';
+          document.getElementById('resultTitle').textContent = '✓ 生成成功';
+          document.getElementById('resultMsg').textContent = data.filename;
+          const link = document.getElementById('resultLink');
+          link.href = data.download_url;
+          link.download = data.filename;
+          link.style.display = 'inline-block';
+        } else {
+          box.className = 'result-box error';
+          document.getElementById('resultTitle').textContent = '✗ 生成失败';
+          document.getElementById('resultMsg').textContent = data.error;
+        }
+      } catch (e) {
+        alert('请求失败：' + e.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '生成研报精选';
+      }
+    }
+
+    // ── 摘要字数显示 ──
+    // 确定各卡片在已上传文章中的顺序（0-based），第0篇目标60-80字，其余40-60字
+    function getCardOrder(cardIdx) {
+      let order = 0;
+      for (let j = 0; j < cardIdx; j++) {
+        if (state[j] && state[j].file_id) order++;
+      }
+      return order;
+    }
+
+    function updateCharCount(i) {
+      const ta = document.getElementById(`summary-${i}`);
+      const countEl = document.getElementById(`char-count-${i}`);
+      if (!ta || !countEl) return;
+      const text = ta.value.replace(/\n/g, '');
+      const len = text.length;
+      const order = getCardOrder(i);
+      const [minC, maxC] = order === 0 ? [90, 120] : [60, 90];
+      const inRange = len >= minC && len <= maxC;
+      countEl.textContent = `${len}字`;
+      countEl.className = 'char-count ' + (inRange ? 'ok' : 'warn');
+    }
+
+    // ── 超链接映射 ──
+    let linkRowCount = 0;
+
+    function addLinkRow() {
+      linkRowCount++;
+      const id = linkRowCount;
+      const container = document.getElementById('linkMapRows');
+      const row = document.createElement('div');
+      row.className = 'link-row';
+      row.id = `link-row-${id}`;
+      row.innerHTML = `
+        <input type="text" placeholder="文章名（如：港股2026年展望："牛市"的下一步）" id="link-name-${id}">
+        <input type="text" placeholder="超链接 URL" id="link-url-${id}" class="url-input">
+        <button class="btn-remove-link" onclick="removeLinkRow(${id})" title="删除">×</button>
+      `;
+      container.appendChild(row);
+    }
+
+    function removeLinkRow(id) {
+      const row = document.getElementById(`link-row-${id}`);
+      if (row) row.remove();
+    }
+
+    function getLinkMap() {
+      const result = [];
+      document.querySelectorAll('.link-row').forEach(row => {
+        const id = row.id.replace('link-row-', '');
+        const name = document.getElementById(`link-name-${id}`)?.value?.trim();
+        const url = document.getElementById(`link-url-${id}`)?.value?.trim();
+        if (name && url) result.push({ name, url });
+      });
+      return result;
+    }
+
+    initCards();
+  </script>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       研报清单生成功能
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="list-section">
+    <h2>研报清单生成</h2>
+    <p class="section-hint">将中金点睛各分类页面的研报列表文字粘贴到对应框中，点击「解析」后确认内容，再生成 Word 清单。</p>
+
+    <div class="list-cats-grid">
+      <div class="list-cat-card">
+        <h4>宏观</h4>
+        <textarea id="paste-宏观" placeholder="从中金点睛复制宏观分类的研报列表文字粘贴到这里…"></textarea>
+      </div>
+      <div class="list-cat-card">
+        <h4>策略及大宗商品</h4>
+        <textarea id="paste-策略及大宗商品" placeholder="从中金点睛复制策略及大宗商品分类的研报列表文字粘贴到这里…"></textarea>
+      </div>
+      <div class="list-cat-card">
+        <h4>固定收益</h4>
+        <textarea id="paste-固定收益" placeholder="从中金点睛复制固定收益分类的研报列表文字粘贴到这里…"></textarea>
+      </div>
+      <div class="list-cat-card">
+        <h4>行业</h4>
+        <textarea id="paste-行业" placeholder="从中金点睛复制行业分类的研报列表文字粘贴到这里…"></textarea>
+      </div>
+    </div>
+
+    <button class="btn-parse" onclick="parseLists()">解析研报列表</button>
+
+    <!-- 解析结果预览（可编辑） -->
+    <div class="parsed-preview" id="parsedPreview"></div>
+
+    <div class="list-note" id="listNote" style="display:none">
+      ⚠️ 提示：生成 Word 后，请手动检查"——"符号是否被 Times New Roman 替换为"——"，如有需要请在 Word 中手动校正。
+    </div>
+
+    <button class="btn-generate-list" id="btnGenerateList" disabled onclick="generateList()">生成研报清单 docx</button>
+
+    <div class="result-box" id="listResultBox">
+      <h3 id="listResultTitle"></h3>
+      <p id="listResultMsg"></p>
+      <a id="listResultLink" class="btn-download" style="display:none" href="#">下载研报清单 docx</a>
+    </div>
+  </div>
+
+  <script>
+    const LIST_CATS = ['宏观', '策略及大宗商品', '固定收益', '行业'];
+    // parsedData[cat] = [{title, date}, ...]
+    let parsedData = {};
+
+    async function parseLists() {
+      const categories = {};
+      let hasAny = false;
+      for (const cat of LIST_CATS) {
+        const text = document.getElementById(`paste-${cat}`)?.value?.trim() || '';
+        categories[cat] = text;
+        if (text) hasAny = true;
+      }
+      if (!hasAny) {
+        alert('请至少粘贴一个分类的内容');
+        return;
+      }
+
+      try {
+        const resp = await fetch('/parse_list', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ categories }),
+        });
+        const data = await resp.json();
+        parsedData = data;
+        renderParsedPreview(data);
+        document.getElementById('listNote').style.display = 'block';
+        document.getElementById('btnGenerateList').disabled = false;
+      } catch (e) {
+        alert('解析失败：' + e.message);
+      }
+    }
+
+    function renderParsedPreview(data) {
+      const container = document.getElementById('parsedPreview');
+      container.style.display = 'block';
+      container.innerHTML = '';
+
+      let globalIdx = 1;
+      for (const cat of LIST_CATS) {
+        const items = data[cat] || [];
+        if (!items.length) continue;
+
+        const block = document.createElement('div');
+        block.className = 'parsed-cat-block';
+        block.innerHTML = `<h4>${cat}（${items.length} 篇）</h4>`;
+
+        const itemsDiv = document.createElement('div');
+        itemsDiv.id = `parsed-items-${cat}`;
+
+        for (let j = 0; j < items.length; j++) {
+          itemsDiv.appendChild(makeItemRow(cat, j, globalIdx, items[j].title, items[j].date));
+          globalIdx++;
+        }
+
+        const addBtn = document.createElement('button');
+        addBtn.className = 'btn-add-item';
+        addBtn.textContent = '+ 手动添加';
+        addBtn.onclick = () => addManualItem(cat);
+        block.appendChild(itemsDiv);
+        block.appendChild(addBtn);
+        container.appendChild(block);
+      }
+    }
+
+    function makeItemRow(cat, localIdx, globalIdx, title, date) {
+      const row = document.createElement('div');
+      row.className = 'parsed-item';
+      row.id = `item-${cat}-${localIdx}`;
+      row.innerHTML = `
+        <span class="parsed-item-num">${globalIdx}</span>
+        <input type="text" value="${escHtml(title)}" placeholder="标题"
+               oninput="updateParsedItem('${cat}', ${localIdx}, 'title', this.value)">
+        <input type="text" class="date-input" value="${escHtml(date)}" placeholder="日期"
+               oninput="updateParsedItem('${cat}', ${localIdx}, 'date', this.value)">
+        <button class="btn-del-item" onclick="deleteItem('${cat}', ${localIdx})" title="删除">×</button>
+      `;
+      return row;
+    }
+
+    function escHtml(str) {
+      return (str || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function updateParsedItem(cat, idx, field, value) {
+      if (parsedData[cat] && parsedData[cat][idx] !== undefined) {
+        parsedData[cat][idx][field] = value;
+      }
+    }
+
+    function deleteItem(cat, idx) {
+      if (!parsedData[cat]) return;
+      parsedData[cat].splice(idx, 1);
+      // 重渲染
+      renderParsedPreview(parsedData);
+    }
+
+    function addManualItem(cat) {
+      if (!parsedData[cat]) parsedData[cat] = [];
+      parsedData[cat].push({ title: '', date: '' });
+      renderParsedPreview(parsedData);
+    }
+
+    async function generateList() {
+      const issue = document.getElementById('issueInput').value.trim();
+
+      // 从编辑后的 parsedData 收集最终数据
+      const categories = {};
+      for (const cat of LIST_CATS) {
+        categories[cat] = (parsedData[cat] || []).filter(it => it.title.trim());
+      }
+
+      const btn = document.getElementById('btnGenerateList');
+      btn.disabled = true;
+      btn.textContent = '生成中…';
+
+      try {
+        const resp = await fetch('/generate_list', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ issue, categories }),
+        });
+        const data = await resp.json();
+
+        const box = document.getElementById('listResultBox');
+        box.style.display = 'block';
+        if (data.success) {
+          box.className = 'result-box success';
+          document.getElementById('listResultTitle').textContent = '✓ 生成成功';
+          document.getElementById('listResultMsg').textContent = data.filename;
+          const link = document.getElementById('listResultLink');
+          link.href = data.download_url;
+          link.download = data.filename;
+          link.style.display = 'inline-block';
+        } else {
+          box.className = 'result-box error';
+          document.getElementById('listResultTitle').textContent = '✗ 生成失败';
+          document.getElementById('listResultMsg').textContent = data.error;
+        }
+      } catch (e) {
+        alert('请求失败：' + e.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '生成研报清单 docx';
+      }
+    }
+  </script>
+</body>
+</html>
