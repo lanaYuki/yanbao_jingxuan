@@ -821,7 +821,7 @@ def _add_header_to_docx(output_path: str):
 
 
 def build_jingxuan(articles: list, output_path: str, issue: str = '',
-                    link_map: dict = None):
+                    link_map: dict = None, list_categories: dict = None):
     """
     构建研报精选 docx。
 
@@ -948,6 +948,12 @@ def build_jingxuan(articles: list, output_path: str, issue: str = '',
 
         if i < len(articles) - 1:
             _add_page_break(doc)
+
+    # ── 研报清单（附在研报精选之后）──
+    if list_categories and any(list_categories.get(cat) for cat in
+                                ['宏观', '策略及大宗商品', '固定收益', '行业']):
+        from list_builder import append_list_to_doc
+        append_list_to_doc(doc, list_categories)
 
     doc.save(output_path)
 

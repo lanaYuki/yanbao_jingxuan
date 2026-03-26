@@ -430,32 +430,14 @@ def _add_report_table(doc: Document, items: list):
 # ── 主构建函数 ────────────────────────────────────────────────
 
 
-def build_list_docx(category_data: dict, output_path: str, issue: str = ''):
+def append_list_to_doc(doc: Document, category_data: dict):
     """
-    构建研报清单 docx。
-
-    category_data: {
-        '宏观': [{'title': str, 'date': str}, ...],
-        '策略及大宗商品': [...],
-        '固定收益': [...],
-        '行业': [...],
-    }
-    issue: 期号字符串
+    将研报清单内容追加到已有 doc 对象末尾（供 build_jingxuan 合并调用）。
+    在清单首页前插入分页符，然后写入"附：一周主要研报回顾"标题和各分类表格。
     """
-    doc = Document()
+    _add_page_break(doc)
 
-    # 页面设置
-    for sec in doc.sections:
-        sec.top_margin = Cm(3.2)
-        sec.bottom_margin = Cm(2.2)
-        sec.left_margin = Cm(2.2)
-        sec.right_margin = Cm(2.2)
-
-    # 删除默认空段落
-    for para in doc.paragraphs:
-        para._element.getparent().remove(para._element)
-
-    # 总标题："附：一周主要研报回顾"
+    # 总标题
     title_para = doc.add_paragraph()
     pf = title_para.paragraph_format
     pf.space_before = Pt(0)
@@ -486,7 +468,6 @@ def build_list_docx(category_data: dict, output_path: str, issue: str = ''):
             rpr.append(el)
         el.set(qn('w:val'), sz_val)
 
-    # 确定哪些分类有内容，找最后一个有内容的分类
     active_cats = [cat for cat in CATEGORIES if category_data.get(cat)]
     last_cat = active_cats[-1] if active_cats else None
 
@@ -494,16 +475,23 @@ def build_list_docx(category_data: dict, output_path: str, issue: str = ''):
         items = category_data.get(cat, [])
         if not items:
             continue
-
-        is_last = (cat == last_cat)
-
-        # 若"行业"是最后一节且前面有其他内容，先分页
-        if cat == '行业' and is_last and cat_i > 0:
+        if cat == '行业' and cat == last_cat and cat_i > 0:
             _add_page_break(doc)
-
         _add_section_heading_para(doc, cat)
         _add_report_table(doc, items)
 
+
+def build_list_docx(category_data: dict, output_path: str, issue: str = ''):
+    """独立构建研报清单 docx（保留备用）。"""
+    doc = Document()
+    for sec in doc.sections:
+        sec.top_margin = Cm(3.2)
+        sec.bottom_margin = Cm(2.2)
+        sec.left_margin = Cm(2.2)
+        sec.right_margin = Cm(2.2)
+    for para in doc.paragraphs:
+        para._element.getparent().remove(para._element)
+    append_list_to_doc(doc, category_data)
     doc.save(output_path)
 
     # 添加页眉

@@ -449,7 +449,6 @@
     <h3 id="resultTitle"></h3>
     <p id="resultMsg"></p>
     <a id="resultLink" class="btn-download" style="display:none" href="#">下载研报精选 docx</a>
-    <a id="resultListLink" class="btn-download" style="display:none;margin-left:10px;background:#718096" href="#">下载研报清单 docx</a>
   </div>
 
   <script>
@@ -614,15 +613,6 @@
           link.href = data.download_url;
           link.download = data.filename;
           link.style.display = 'inline-block';
-          // 研报清单下载链接
-          const listLink = document.getElementById('resultListLink');
-          if (data.list_download_url) {
-            listLink.href = data.list_download_url;
-            listLink.download = data.list_filename;
-            listLink.style.display = 'inline-block';
-          } else {
-            listLink.style.display = 'none';
-          }
         } else {
           box.className = 'result-box error';
           document.getElementById('resultTitle').textContent = '✗ 生成失败';
