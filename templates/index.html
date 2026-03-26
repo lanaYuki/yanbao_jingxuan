@@ -448,7 +448,8 @@
   <div class="result-box" id="resultBox">
     <h3 id="resultTitle"></h3>
     <p id="resultMsg"></p>
-    <a id="resultLink" class="btn-download" style="display:none" href="#">下载精选 docx</a>
+    <a id="resultLink" class="btn-download" style="display:none" href="#">下载研报精选 docx</a>
+    <a id="resultListLink" class="btn-download" style="display:none;margin-left:10px;background:#718096" href="#">下载研报清单 docx</a>
   </div>
 
   <script>
@@ -599,7 +600,7 @@
         const resp = await fetch('/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ issue, articles, link_map: getLinkMap() }),
+          body: JSON.stringify({ issue, articles, link_map: getLinkMap(), list_categories: getListCategories() }),
         });
         const data = await resp.json();
 
@@ -613,6 +614,15 @@
           link.href = data.download_url;
           link.download = data.filename;
           link.style.display = 'inline-block';
+          // 研报清单下载链接
+          const listLink = document.getElementById('resultListLink');
+          if (data.list_download_url) {
+            listLink.href = data.list_download_url;
+            listLink.download = data.list_filename;
+            listLink.style.display = 'inline-block';
+          } else {
+            listLink.style.display = 'none';
+          }
         } else {
           box.className = 'result-box error';
           document.getElementById('resultTitle').textContent = '✗ 生成失败';
@@ -721,13 +731,6 @@
       ⚠️ 提示：生成 Word 后，请手动检查"——"符号是否被 Times New Roman 替换为"——"，如有需要请在 Word 中手动校正。
     </div>
 
-    <button class="btn-generate-list" id="btnGenerateList" disabled onclick="generateList()">生成研报清单 docx</button>
-
-    <div class="result-box" id="listResultBox">
-      <h3 id="listResultTitle"></h3>
-      <p id="listResultMsg"></p>
-      <a id="listResultLink" class="btn-download" style="display:none" href="#">下载研报清单 docx</a>
-    </div>
   </div>
 
   <script>
@@ -758,7 +761,6 @@
         parsedData = data;
         renderParsedPreview(data);
         document.getElementById('listNote').style.display = 'block';
-        document.getElementById('btnGenerateList').disabled = false;
       } catch (e) {
         alert('解析失败：' + e.message);
       }
@@ -834,48 +836,13 @@
       renderParsedPreview(parsedData);
     }
 
-    async function generateList() {
-      const issue = document.getElementById('issueInput').value.trim();
-
-      // 从编辑后的 parsedData 收集最终数据
+    function getListCategories() {
+      // 收集编辑后的研报清单数据（有则传，无则传空对象）
       const categories = {};
       for (const cat of LIST_CATS) {
         categories[cat] = (parsedData[cat] || []).filter(it => it.title.trim());
       }
-
-      const btn = document.getElementById('btnGenerateList');
-      btn.disabled = true;
-      btn.textContent = '生成中…';
-
-      try {
-        const resp = await fetch('/generate_list', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ issue, categories }),
-        });
-        const data = await resp.json();
-
-        const box = document.getElementById('listResultBox');
-        box.style.display = 'block';
-        if (data.success) {
-          box.className = 'result-box success';
-          document.getElementById('listResultTitle').textContent = '✓ 生成成功';
-          document.getElementById('listResultMsg').textContent = data.filename;
-          const link = document.getElementById('listResultLink');
-          link.href = data.download_url;
-          link.download = data.filename;
-          link.style.display = 'inline-block';
-        } else {
-          box.className = 'result-box error';
-          document.getElementById('listResultTitle').textContent = '✗ 生成失败';
-          document.getElementById('listResultMsg').textContent = data.error;
-        }
-      } catch (e) {
-        alert('请求失败：' + e.message);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = '生成研报清单 docx';
-      }
+      return categories;
     }
   </script>
 </body>

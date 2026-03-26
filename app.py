@@ -171,11 +171,25 @@ def generate():
     except Exception as e:
         return jsonify({'error': f'生成失败：{str(e)}'}), 500
 
-    return jsonify({
+    result = {
         'success': True,
         'download_url': f'/download/{output_filename}',
         'filename': output_filename,
-    })
+    }
+
+    # 若前端同时传了研报清单数据，一并生成
+    list_categories = body.get('list_categories', {})
+    if any(list_categories.get(cat) for cat in CATEGORIES):
+        list_filename = f'CGI每周研报精选（{issue_str}）-研报清单.docx'
+        list_path = os.path.join(OUTPUT_DIR, list_filename)
+        try:
+            build_list_docx(list_categories, list_path, issue=issue)
+            result['list_download_url'] = f'/download/{list_filename}'
+            result['list_filename'] = list_filename
+        except Exception as e:
+            result['list_error'] = f'研报清单生成失败：{str(e)}'
+
+    return jsonify(result)
 
 
 @app.route('/download/<filename>')
