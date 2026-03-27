@@ -745,14 +745,20 @@ def _add_header_to_docx(output_path: str):
         new_ind.set(f'{{{W_NS_LOCAL}}}firstLine', '0')
 
         # 移除段前段后间距，使文字紧贴灰色线
-        spacing = pPr.find(f'{{{W_NS_LOCAL}}}spacing') or etree.SubElement(pPr, f'{{{W_NS_LOCAL}}}spacing')
+        spacing = pPr.find(f'{{{W_NS_LOCAL}}}spacing')
+        if spacing is None:
+            spacing = etree.SubElement(pPr, f'{{{W_NS_LOCAL}}}spacing')
         spacing.set(f'{{{W_NS_LOCAL}}}before', '0')
         spacing.set(f'{{{W_NS_LOCAL}}}after', '0')
 
         # 设置字体大小为 14pt (28)
         for run in txbx_para.findall(f'{{{W_NS_LOCAL}}}r'):
-            rPr = run.find(f'{{{W_NS_LOCAL}}}rPr') or etree.SubElement(run, f'{{{W_NS_LOCAL}}}rPr')
-            sz = rPr.find(f'{{{W_NS_LOCAL}}}sz') or etree.SubElement(rPr, f'{{{W_NS_LOCAL}}}sz')
+            rPr = run.find(f'{{{W_NS_LOCAL}}}rPr')
+            if rPr is None:
+                rPr = etree.SubElement(run, f'{{{W_NS_LOCAL}}}rPr')
+            sz = rPr.find(f'{{{W_NS_LOCAL}}}sz')
+            if sz is None:
+                sz = etree.SubElement(rPr, f'{{{W_NS_LOCAL}}}sz')
             sz.set(f'{{{W_NS_LOCAL}}}val', '28')
 
     header4_xml = etree.tostring(h4_tree, xml_declaration=True, encoding='UTF-8', standalone=True)
