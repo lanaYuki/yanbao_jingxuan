@@ -430,6 +430,17 @@ def _add_report_table(doc: Document, items: list):
 # ── 主构建函数 ────────────────────────────────────────────────
 
 
+def _sort_items_by_date(items: list) -> list:
+    """按日期升序排序（日期早的在先）。日期格式 YYYY.M.D，无法解析的排最后。"""
+    def _to_date(item):
+        try:
+            parts = item.get('date', '').split('.')
+            return datetime(int(parts[0]), int(parts[1]), int(parts[2]))
+        except Exception:
+            return datetime.max
+    return sorted(items, key=_to_date)
+
+
 def append_list_to_doc(doc: Document, category_data: dict):
     """
     将研报清单内容追加到已有 doc 对象末尾（供 build_jingxuan 合并调用）。
@@ -478,7 +489,7 @@ def append_list_to_doc(doc: Document, category_data: dict):
         if cat == '行业' and cat == last_cat and cat_i > 0:
             _add_page_break(doc)
         _add_section_heading_para(doc, cat)
-        _add_report_table(doc, items)
+        _add_report_table(doc, _sort_items_by_date(items))
 
 
 def build_list_docx(category_data: dict, output_path: str, issue: str = ''):
