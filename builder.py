@@ -241,15 +241,13 @@ def _add_hyperlink_run(para, text: str, url: str, font: str, size: Pt, bold: boo
 def _add_footnote_ref_to_para(para, fn_new_id: int):
     """
     在段落中插入脚注上标引用（w:footnoteReference）。
-    使用 Word 内置的脚注引用字符样式（FootnoteReference / a0），
-    让 Word 自动处理上标位置，避免手动 vertAlign 导致位置偏低。
+    格式与 Word 原生"引用→插入脚注"完全一致：w:vertAlign superscript。
     """
     run_el = OxmlElement('w:r')
     rPr = OxmlElement('w:rPr')
-    # 使用 Word 内置脚注引用样式，Word 会自动上标到右上角
-    rStyle = OxmlElement('w:rStyle')
-    rStyle.set(qn('w:val'), 'a0')  # FootnoteReference 的内置样式 ID
-    rPr.append(rStyle)
+    vertAlign = OxmlElement('w:vertAlign')
+    vertAlign.set(qn('w:val'), 'superscript')
+    rPr.append(vertAlign)
     run_el.append(rPr)
 
     fn_ref = OxmlElement('w:footnoteReference')
@@ -268,6 +266,27 @@ def _set_para_indent_zero(para):
         pPr.append(ind)
     ind.set(qn('w:firstLine'), '0')
     ind.set(qn('w:firstLineChars'), '0')
+
+
+def _set_para_first_line_indent(para):
+    """设置首行缩进两字（firstLineChars=200），用于正文段落。"""
+    pPr = para._p.get_or_add_pPr()
+    ind = pPr.find(qn('w:ind'))
+    if ind is None:
+        ind = OxmlElement('w:ind')
+        pPr.append(ind)
+    ind.set(qn('w:firstLineChars'), '200')
+    ind.set(qn('w:firstLine'), str(int(SIZE_BODY.pt * 2 * 20)))  # 2字宽（twips）
+
+
+def _set_para_justify(para):
+    """段落两端对齐。"""
+    pPr = para._p.get_or_add_pPr()
+    jc = pPr.find(qn('w:jc'))
+    if jc is None:
+        jc = OxmlElement('w:jc')
+        pPr.append(jc)
+    jc.set(qn('w:val'), 'both')
 
 
 def _add_page_break(doc: Document):
@@ -342,6 +361,7 @@ def _add_cover_page(doc: Document, issue: str, issue_date: str, articles: list):
         if summary:
             p_sum = doc.add_paragraph()
             _set_para_indent_zero(p_sum)
+            _set_para_justify(p_sum)
             pf = p_sum.paragraph_format
             pf.line_spacing_rule = WD_LINE_SPACING.EXACTLY
             pf.line_spacing = Pt(24)
@@ -388,14 +408,15 @@ def add_body_paragraph(doc: Document, runs_data: list, line_spacing_pt: float = 
     - link_map: {文章名: url}，用于替换文中文章名为超链接
     """
     para = doc.add_paragraph()
-    _set_para_format(para, line_spacing_pt=line_spacing_pt, space_after_pt=6)
+    _set_para_format(para, line_spacing_pt=line_spacing_pt, space_after_pt=12)
+    _set_para_justify(para)
 
     if has_triangle:
-        # 两个全角空格缩进 + ► + 半角空格
-        _add_run_to_para(para, '\u3000\u3000► ', FONT_FANG_SONG, SIZE_BODY, bold=False)
+        # 首行缩进两字 + ► + 半角空格（► 作为 run 内容，缩进用 w:ind）
+        _set_para_first_line_indent(para)
+        _add_run_to_para(para, '► ', FONT_FANG_SONG, SIZE_BODY, bold=False)
     else:
-        # 首行空两格（全角空格）
-        _add_run_to_para(para, '\u3000\u3000', FONT_FANG_SONG, SIZE_BODY, bold=False)
+        _set_para_first_line_indent(para)
 
     if footnote_id_map is None:
         footnote_id_map = {}
@@ -449,15 +470,14 @@ def _apply_link_map_to_para(para, text: str, bold: bool, link_map: dict) -> str:
 
 
 def _count_para_lines(text: str, chars_per_line: int = 31,
-                       line_spacing_pt: float = 24, space_after_pt: float = 6) -> float:
+                       line_spacing_pt: float = 24, space_after_pt: float = 12) -> float:
     """
     估算段落占用的等效行数（单位：line_spacing_pt 的行高）。
-    含首行两个全角空格缩进，并将 space_after 折算为行高单位。
+    首行缩进通过 w:ind 实现，占约2字宽，折算入行长。
     """
     import math
-    length = len(text) + 2  # +2 for 全角空格缩进
+    length = len(text) + 2  # +2 估算首行缩进占用宽度
     text_lines = math.ceil(max(length, 1) / chars_per_line)
-    # space_after 折算为行高单位
     extra = space_after_pt / line_spacing_pt
     return text_lines + extra
 
@@ -508,8 +528,11 @@ def add_citation_section(doc: Document, date: str, institution: str,
     def _add_source_line(doc):
         p = doc.add_paragraph()
         _set_para_format(p, line_spacing_pt=18, space_before_pt=4, space_after_pt=0)
-        run = p.add_run(f'以上观点来自：{date}{institution}已发布的《{title}》')
-        _set_run_font(run, FONT_FANG_SONG, SIZE_CITATION, bold=True)
+        text = f'以上观点来自：{date}{institution}已发布的《{title}》'
+        for seg in _split_mixed_runs(text, bold=True,
+                                      cn_font=FONT_FANG_SONG, en_font=FONT_TIMES,
+                                      cn_size=SIZE_CITATION, en_size=SIZE_CITATION):
+            _add_run_to_para(p, seg['text'], seg['font'], seg['size'], seg['bold'])
 
     def _add_author_lines(doc):
         for author in authors:
@@ -517,8 +540,10 @@ def add_citation_section(doc: Document, date: str, institution: str,
             _set_para_format(p, line_spacing_pt=18, space_after_pt=0)
             sfc_part = f' SFC CE Ref：{author["sfc"]}' if author.get('sfc') else ''
             text = f'{author["name"]} 分析员 SAC 执业证书编号：{author["sac"]}{sfc_part}'
-            run = p.add_run(text)
-            _set_run_font(run, FONT_FANG_SONG, SIZE_CITATION, bold=False)
+            for seg in _split_mixed_runs(text, bold=False,
+                                          cn_font=FONT_FANG_SONG, en_font=FONT_TIMES,
+                                          cn_size=SIZE_CITATION, en_size=SIZE_CITATION):
+                _add_run_to_para(p, seg['text'], seg['font'], seg['size'], seg['bold'])
 
     def _add_fill(doc, used_lines, info_lines):
         """插入空白段落使内容压底（每个空白段落 = 1行24pt）"""
@@ -582,28 +607,58 @@ def _add_footnotes_to_docx(output_path: str, all_footnotes: list[str]):
   </w:p>
 </w:footnote>''')
 
-    # 正文脚注：上标数字 + 脚注文本，字体 Times New Roman 五号（10.5pt = 21 half-points）
+    # 正文脚注：上标数字 + 脚注文本，中文仿宋五号，英文/数字 Times New Roman 五号
     FN_SZ = '21'  # 10.5pt * 2
-    FN_FONT = 'Times New Roman'
+    FN_FONT_EN = 'Times New Roman'
+    FN_FONT_CN = '仿宋_GB2312'
+
+    def _fn_run(text, is_en, space_preserve=False, superscript=False):
+        font = FN_FONT_EN if is_en else FN_FONT_CN
+        sp = ' xml:space="preserve"' if space_preserve else ''
+        # 上标数字用 FootnoteReference 样式（与正文引用标记一致）
+        if superscript:
+            rpr_inner = f'<w:rStyle w:val="22"/>'
+        else:
+            rpr_inner = (
+                f'<w:rFonts w:ascii="{FN_FONT_EN}" w:hAnsi="{FN_FONT_EN}" w:eastAsia="{font}"/>\n'
+                f'        <w:sz w:val="{FN_SZ}"/><w:szCs w:val="{FN_SZ}"/>'
+            )
+        return (
+            f'    <w:r>\n'
+            f'      <w:rPr>\n'
+            f'        {rpr_inner}\n'
+            f'      </w:rPr>\n'
+            f'      <w:t{sp}>{text}</w:t>\n'
+            f'    </w:r>'
+        )
+
+    def _split_fn_text(text):
+        """将脚注文本按中/英文数字拆分为 [(seg, is_en), ...]"""
+        if not text:
+            return []
+        segs = []
+        cur = text[0]
+        cur_en = _is_ascii_char(text[0])
+        for ch in text[1:]:
+            ch_en = _is_ascii_char(ch)
+            if ch_en == cur_en:
+                cur += ch
+            else:
+                segs.append((cur, cur_en))
+                cur, cur_en = ch, ch_en
+        segs.append((cur, cur_en))
+        return segs
+
     for idx, url in enumerate(all_footnotes, start=1):
+        # 上标编号（纯数字，用 Times New Roman）
+        runs = _fn_run(str(idx), is_en=True, superscript=True)
+        # 脚注正文（首段加空格，混排）
+        for seg_text, is_en in _split_fn_text(' ' + url):
+            runs += '\n' + _fn_run(seg_text, is_en=is_en, space_preserve=(seg_text[0] == ' ' or seg_text[-1] == ' '))
         fn_entries.append(f'''<w:footnote w:id="{idx}">
   <w:p>
     <w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>
-    <w:r>
-      <w:rPr>
-        <w:rFonts w:ascii="{FN_FONT}" w:hAnsi="{FN_FONT}" w:eastAsia="{FN_FONT}"/>
-        <w:sz w:val="{FN_SZ}"/><w:szCs w:val="{FN_SZ}"/>
-        <w:vertAlign w:val="superscript"/>
-      </w:rPr>
-      <w:t>{idx}</w:t>
-    </w:r>
-    <w:r>
-      <w:rPr>
-        <w:rFonts w:ascii="{FN_FONT}" w:hAnsi="{FN_FONT}" w:eastAsia="{FN_FONT}"/>
-        <w:sz w:val="{FN_SZ}"/><w:szCs w:val="{FN_SZ}"/>
-      </w:rPr>
-      <w:t xml:space="preserve"> {url}</w:t>
-    </w:r>
+{runs}
   </w:p>
 </w:footnote>''')
 
@@ -901,9 +956,23 @@ def build_jingxuan(articles: list, output_path: str, issue: str = '',
     from ai_helper import check_and_fix_orphan_lines
 
     for i, article in enumerate(articles):
+        import re as _re
         section_name = article.get('section', '')
         title        = article.get('title', '')
-        paragraphs   = article.get('paragraphs', [])
+        # 删除正文中的图表引用，先对整段 para_text 做，再同步到 runs
+        raw_paragraphs = article.get('paragraphs', [])
+        paragraphs = []
+        for pd in raw_paragraphs:
+            clean_text = _re.sub(r'[（(]图表\s*\d+[）)]', '', pd['para_text'])
+            if clean_text == pd['para_text']:
+                paragraphs.append(pd)
+            else:
+                new_runs = []
+                for r in pd['runs']:
+                    new_r = dict(r)
+                    new_r['text'] = _re.sub(r'[（(]图表\s*\d+[）)]', '', r['text'])
+                    new_runs.append(new_r)
+                paragraphs.append({**pd, 'para_text': clean_text, 'runs': new_runs})
         date         = article.get('date', '')
         institution  = article.get('institution', '中金公司研究部')
         authors      = article.get('authors', [])
@@ -946,7 +1015,7 @@ def build_jingxuan(articles: list, output_path: str, issue: str = '',
                 body_lines += _count_para_lines(
                     para_data.get('para_text', ''),
                     line_spacing_pt=body_line_spacing,
-                    space_after_pt=6,
+                    space_after_pt=12,
                 )
             add_citation_section(doc, date, institution, title, authors,
                                   body_lines_used=body_lines,

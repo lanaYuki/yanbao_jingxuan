@@ -61,7 +61,22 @@
       color: #888;
       margin-bottom: 12px;
       font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
+    .btn-clear-card {
+      background: none;
+      border: none;
+      color: #ccc;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 0;
+      line-height: 1;
+      display: none;
+    }
+    .btn-clear-card:hover { color: #e53e3e; }
+    .has-file .btn-clear-card { display: inline; }
     .drop-zone {
       border: 1.5px dashed #bbb;
       border-radius: 8px;
@@ -467,7 +482,10 @@
     function cardHTML(i) {
       return `
         <div class="article-card" id="card-${i}">
-          <div class="card-header">研报 ${i + 1}</div>
+          <div class="card-header">
+            <span>研报 ${i + 1}</span>
+            <button class="btn-clear-card" onclick="clearCard(${i})" title="删除上传文件">×</button>
+          </div>
           <div class="drop-zone" id="dz-${i}"
                onclick="document.getElementById('file-${i}').click()"
                ondragover="onDragOver(event, ${i})"
@@ -569,6 +587,25 @@
     function checkAllReady() {
       const allReady = Object.values(state).some(s => s.file_id !== null);
       document.getElementById('btnGenerate').disabled = !allReady;
+    }
+
+    function clearCard(i) {
+      state[i] = { file_id: null, section: '', summary: '', ai_polling: null };
+      const card = document.getElementById(`card-${i}`);
+      card.classList.remove('has-file');
+      // 重置上传区
+      const dz = document.getElementById(`dz-${i}`);
+      dz.className = 'drop-zone';
+      dz.innerHTML = `<input type="file" id="file-${i}" accept=".docx" onchange="onFileChange(${i}, this.files[0])"><div>拖拽或点击上传 .docx 文件</div>`;
+      dz.onclick = () => document.getElementById(`file-${i}`).click();
+      // 重置其他区域
+      document.getElementById(`section-${i}`).value = '';
+      document.getElementById(`ai-section-badge-${i}`).style.display = 'none';
+      document.getElementById(`ai-status-${i}`).style.display = 'none';
+      document.getElementById(`info-row-${i}`).innerHTML = '';
+      document.getElementById(`summary-box-${i}`).style.display = 'none';
+      document.getElementById(`summary-${i}`).value = '';
+      checkAllReady();
     }
 
     async function generateJingxuan() {

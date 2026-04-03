@@ -5,6 +5,8 @@ extractor.py - 从研报源 docx 中提取所需内容
 
 import re
 import zipfile
+
+_FIGURE_RE = re.compile(r'[（(]图表\s*\d+[）)]')
 from docx import Document
 from lxml import etree
 
@@ -204,6 +206,17 @@ def extract_highlighted_paragraphs(docx_path: str) -> list:
             continue
 
         para_text = ''.join(r['text'] for r in runs_data)
+        if not para_text.strip():
+            continue
+
+        # 删除图表引用文字，如"(图表1)""（图表3）"等
+        # 先对每个 run 单独替换（处理同一 run 内的情况）
+        FIGURE_RE = re.compile(r'[（(]图表\s*\d+[）)]')
+        runs_data = [{**r, 'text': FIGURE_RE.sub('', r['text'])} for r in runs_data]
+        runs_data = [r for r in runs_data if r['text']]
+        # 再对整段兜底（处理跨 run 的极少数情况）
+        para_text = FIGURE_RE.sub('', ''.join(r['text'] for r in runs_data))
+
         if not para_text.strip():
             continue
 
