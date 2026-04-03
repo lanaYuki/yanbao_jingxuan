@@ -107,8 +107,8 @@ def _set_run_font_mixed(run, cn_font: str, en_font: str, cn_size: Pt, en_size: P
 
 
 def _is_ascii_char(ch: str) -> bool:
-    """判断单个字符是否为英文字母或数字（需要用 Times New Roman）。"""
-    return ch.isascii() and (ch.isalpha() or ch.isdigit())
+    """判断单个字符是否为英文字母、数字、或英文标点（需要用 Times New Roman）。"""
+    return ch.isascii() and (ch.isalpha() or ch.isdigit() or ch in ',.')
 
 
 def _split_mixed_runs(text: str, bold: bool, cn_font: str, en_font: str,
@@ -959,18 +959,23 @@ def build_jingxuan(articles: list, output_path: str, issue: str = '',
         import re as _re
         section_name = article.get('section', '')
         title        = article.get('title', '')
-        # 删除正文中的图表引用，先对整段 para_text 做，再同步到 runs
+        # 清理正文文本：删除图表引用、删除破折号前空格
+        def _clean_text(t):
+            t = _re.sub(r'[（(]图表\s*\d+[）)]', '', t)
+            t = _re.sub(r'[ \u3000]+(?=[—–\-]{1,2})', '', t)
+            return t
+
         raw_paragraphs = article.get('paragraphs', [])
         paragraphs = []
         for pd in raw_paragraphs:
-            clean_text = _re.sub(r'[（(]图表\s*\d+[）)]', '', pd['para_text'])
+            clean_text = _clean_text(pd['para_text'])
             if clean_text == pd['para_text']:
                 paragraphs.append(pd)
             else:
                 new_runs = []
                 for r in pd['runs']:
                     new_r = dict(r)
-                    new_r['text'] = _re.sub(r'[（(]图表\s*\d+[）)]', '', r['text'])
+                    new_r['text'] = _clean_text(r['text'])
                     new_runs.append(new_r)
                 paragraphs.append({**pd, 'para_text': clean_text, 'runs': new_runs})
         date         = article.get('date', '')

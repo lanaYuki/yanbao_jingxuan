@@ -13,6 +13,9 @@ import os
 import zipfile
 from io import BytesIO
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+_TZ_BEIJING = ZoneInfo('Asia/Shanghai')
 from docx import Document
 from docx.shared import Pt, Cm, Twips
 from docx.enum.text import WD_LINE_SPACING
@@ -134,7 +137,7 @@ def _extract_title_date(block: list) -> tuple:
 
 
 def _today_date() -> str:
-    today = datetime.now()
+    today = datetime.now(_TZ_BEIJING)
     return f'{today.year}.{today.month}.{today.day}'
 
 
@@ -143,7 +146,7 @@ def _parse_date_from_meta(meta_line: str) -> str:
     从元信息行提取日期，格式返回 YYYY.M.D（无补零）。
     优先匹配绝对日期，否则将相对时间转换为今天。
     """
-    today = datetime.now()
+    today = datetime.now(_TZ_BEIJING)
 
     # 绝对日期（yyyy.mm.dd / yyyy-mm-dd / yyyy年mm月dd日）
     m = re.search(r'(\d{4})[.\-年](\d{1,2})[.\-月](\d{1,2})', meta_line)
@@ -172,7 +175,8 @@ def _parse_date_from_meta(meta_line: str) -> str:
 
 
 def _is_ascii_char(ch: str) -> bool:
-    return ch.isascii() and (ch.isalpha() or ch.isdigit())
+    """ASCII 可打印字符（含字母、数字、标点）用 Times New Roman；中文字符用仿宋。"""
+    return ch.isascii() and ch.isprintable()
 
 
 def _set_run_fonts_size(rPr, cn_font: str, en_font: str, size_pt: float):
@@ -424,21 +428,27 @@ def _add_report_table(doc: Document, items: list):
                 r.text = ''
         title_para = title_cell.paragraphs[0]
         _set_cell_para_format(title_para)
-        _add_mixed_runs_to_para(title_para, item.get('title', ''), size_pt=13)
+        title_text = re.sub(r'[ \u3000]+(?=[—–\-]{1,2})', '', item.get('title', ''))
+        _add_mixed_runs_to_para(title_para, title_text, size_pt=13)
 
 
 # ── 主构建函数 ────────────────────────────────────────────────
 
 
 def _sort_items_by_date(items: list) -> list:
-    """按日期升序排序（日期早的在先）。日期格式 YYYY.M.D，无法解析的排最后。"""
-    def _to_date(item):
+    """
+    按日期升序排序（日期早的在先）。
+    同一日期内按原始提交顺序倒序（即后提交的排前面）。
+    日期格式 YYYY.M.D，无法解析的排最后。
+    """
+    def _to_date(item_with_idx):
+        item, orig_idx = item_with_idx
         try:
             parts = item.get('date', '').split('.')
-            return datetime(int(parts[0]), int(parts[1]), int(parts[2]))
+            return (datetime(int(parts[0]), int(parts[1]), int(parts[2])), -orig_idx)
         except Exception:
-            return datetime.max
-    return sorted(items, key=_to_date)
+            return (datetime.max, -orig_idx)
+    return [item for item, _ in sorted(enumerate(items), key=lambda x: _to_date((x[1], x[0])))]
 
 
 def append_list_to_doc(doc: Document, category_data: dict):
