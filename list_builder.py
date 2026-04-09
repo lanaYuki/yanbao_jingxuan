@@ -445,9 +445,9 @@ def _sort_items_by_date(items: list) -> list:
         item, orig_idx = item_with_idx
         try:
             parts = item.get('date', '').split('.')
-            return (datetime(int(parts[0]), int(parts[1]), int(parts[2])), orig_idx)
+            return (datetime(int(parts[0]), int(parts[1]), int(parts[2])), -orig_idx)
         except Exception:
-            return (datetime.max, orig_idx)
+            return (datetime.max, -orig_idx)
     return [item for _, item in sorted(enumerate(items), key=lambda x: _to_date((x[1], x[0])))]
 
 

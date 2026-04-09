@@ -132,6 +132,64 @@ def extract_authors(docx_path: str) -> list:
     return authors
 
 
+def _load_style_bold_map(docx_path: str) -> dict:
+    """
+    解析 word/styles.xml，返回 {styleId: bool} 表示该样式是否为粗体。
+    沿 basedOn 链向上继承；字体设置为黑体也视为粗体。
+    """
+    try:
+        with zipfile.ZipFile(docx_path) as z:
+            if 'word/styles.xml' not in z.namelist():
+                return {}
+            styles_xml = z.read('word/styles.xml')
+    except Exception:
+        return {}
+
+    styles_tree = etree.fromstring(styles_xml)
+    raw = {}
+    for style in styles_tree.findall('.//' + w('style')):
+        sid = style.get(w('styleId'))
+        if not sid:
+            continue
+        based = style.find(w('basedOn'))
+        based_id = based.get(w('val')) if based is not None else None
+        rPr = style.find(w('rPr'))
+        bold_val = None
+        if rPr is not None:
+            b_el = rPr.find(w('b'))
+            if b_el is not None:
+                val = b_el.get(w('val'), '1')
+                bold_val = val not in ('0', 'false')
+            if bold_val is None:
+                rf = rPr.find(w('rFonts'))
+                if rf is not None and '黑体' in rf.get(w('eastAsia'), ''):
+                    bold_val = True
+        raw[sid] = {'bold': bold_val, 'basedOn': based_id}
+
+    resolved = {}
+
+    def resolve(sid):
+        if sid in resolved:
+            return resolved[sid]
+        if sid not in raw:
+            resolved[sid] = False
+            return False
+        info = raw[sid]
+        if info['bold'] is not None:
+            resolved[sid] = info['bold']
+            return info['bold']
+        if info['basedOn']:
+            result = resolve(info['basedOn'])
+            resolved[sid] = result
+            return result
+        resolved[sid] = False
+        return False
+
+    for sid in raw:
+        resolve(sid)
+    return resolved
+
+
 def extract_highlighted_paragraphs(docx_path: str) -> list:
     """
     从研报源第2个表格（正文区）提取所有黄色高亮段落。
@@ -150,6 +208,7 @@ def extract_highlighted_paragraphs(docx_path: str) -> list:
     if len(tbls) < 3:
         return []
 
+    style_bold_map = _load_style_bold_map(docx_path)
     content_tbl = tbls[2]
     result = []
     seen_texts = set()
@@ -164,6 +223,13 @@ def extract_highlighted_paragraphs(docx_path: str) -> list:
         # 检测是否为项目符号段落（numPr），不论原符号是什么，输出时统一用 ►
         pPr = para.find(w('pPr'))
         has_triangle = (pPr is not None and pPr.find(w('numPr')) is not None)
+
+        # 段落样式决定的默认 bold（run 无显式 w:b 时继承）
+        para_style_bold = False
+        if pPr is not None:
+            pStyle = pPr.find(w('pStyle'))
+            if pStyle is not None:
+                para_style_bold = style_bold_map.get(pStyle.get(w('val'), ''), False)
 
         # 提取文本和run级别bold，同时捕捉脚注引用
         runs_data = []
@@ -182,7 +248,7 @@ def extract_highlighted_paragraphs(docx_path: str) -> list:
                 if not run_texts:
                     continue
                 text = ''.join(run_texts)
-                bold = _is_run_element_bold(child)
+                bold = _is_run_element_bold(child, para_style_bold)
                 runs_data.append({'text': text, 'bold': bold, 'footnote_ref': None})
 
             elif tag == w('hyperlink'):
@@ -199,7 +265,7 @@ def extract_highlighted_paragraphs(docx_path: str) -> list:
                     if not run_texts:
                         continue
                     text = ''.join(run_texts)
-                    bold = _is_run_element_bold(run)
+                    bold = _is_run_element_bold(run, para_style_bold)
                     runs_data.append({'text': text, 'bold': bold, 'footnote_ref': None})
 
         if not runs_data:
@@ -259,18 +325,32 @@ def extract_highlighted_paragraphs(docx_path: str) -> list:
     return result
 
 
-def _is_run_element_bold(run_el) -> bool:
-    """判断 lxml run 元素是否真正加粗（排除 w:bCs）。"""
+def _is_run_element_bold(run_el, para_style_bold: bool = False) -> bool:
+    """
+    判断 lxml run 元素是否为粗体。检测顺序：
+    1. rPr 中有 w:b：显式设置，直接用其值（val=0/false 则非粗体）
+    2. rPr 中 w:rFonts[w:cs] 或 [w:eastAsia] 为黑体：视为粗体
+    3. 均无显式设置：继承 para_style_bold（段落样式的粗体设置）
+    """
     rpr = run_el.find(w('rPr'))
     if rpr is None:
-        return False
+        return para_style_bold
+
+    # 显式 w:b
     b_el = rpr.find(w('b'))
-    if b_el is None:
-        return False
-    val = b_el.get(w('val'), '1')
-    if val in ('0', 'false'):
-        return False
-    return True
+    if b_el is not None:
+        val = b_el.get(w('val'), '1')
+        return val not in ('0', 'false')
+
+    # 字体为黑体视为粗体
+    rf = rpr.find(w('rFonts'))
+    if rf is not None:
+        cs_font = rf.get(w('cs'), '')
+        ea_font = rf.get(w('eastAsia'), '')
+        if '黑体' in cs_font or '黑体' in ea_font:
+            return True
+
+    return para_style_bold
 
 
 def extract_footnotes(docx_path: str) -> dict:
