@@ -107,8 +107,8 @@ def _set_run_font_mixed(run, cn_font: str, en_font: str, cn_size: Pt, en_size: P
 
 
 def _is_ascii_char(ch: str) -> bool:
-    """判断单个字符是否为英文字母、数字、或英文标点（需要用 Times New Roman）。"""
-    return ch.isascii() and (ch.isalpha() or ch.isdigit() or ch in ',.')
+    """判断单个字符是否为 ASCII 可打印字符（字母、数字、标点，如%&+-/等），需要用 Times New Roman。"""
+    return ch.isascii() and ch.isprintable() and ch != ' '
 
 
 def _split_mixed_runs(text: str, bold: bool, cn_font: str, en_font: str,
