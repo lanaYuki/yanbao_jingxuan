@@ -211,11 +211,37 @@ def extract_highlighted_paragraphs(docx_path: str) -> list:
 
         # 删除图表引用文字，如"(图表1)""（图表3）"等
         # 先对每个 run 单独替换（处理同一 run 内的情况）
-        FIGURE_RE = re.compile(r'[（(]图表\s*\d+[）)]')
-        runs_data = [{**r, 'text': FIGURE_RE.sub('', r['text'])} for r in runs_data]
+        runs_data = [{**r, 'text': _FIGURE_RE.sub('', r['text'])} for r in runs_data]
         runs_data = [r for r in runs_data if r['text']]
-        # 再对整段兜底（处理跨 run 的极少数情况）
-        para_text = FIGURE_RE.sub('', ''.join(r['text'] for r in runs_data))
+        # 再对整段兜底（处理跨 run 的情况）：
+        # 将所有字符附上 run 属性，对合并文本做替换，再按字符 run 属性重组
+        joined = ''.join(r['text'] for r in runs_data)
+        cleaned = _FIGURE_RE.sub('', joined)
+        if cleaned != joined:
+            # 构建字符→run属性映射
+            char_attrs = []  # [(bold, footnote_ref), ...]
+            for r in runs_data:
+                for _ in r['text']:
+                    char_attrs.append((r['bold'], r.get('footnote_ref')))
+            # 找出被删除的字符位置（对应 joined 中哪些位置被删掉）
+            # 用替换后位置映射重建 runs
+            kept_indices = []
+            ci = 0
+            for m in _FIGURE_RE.finditer(joined):
+                kept_indices.extend(range(ci, m.start()))
+                ci = m.end()
+            kept_indices.extend(range(ci, len(joined)))
+            # 按保留字符重新组合 runs（相邻字符 bold/footnote_ref 相同则合并）
+            new_runs = []
+            for idx in kept_indices:
+                ch = joined[idx]
+                bold, fn_ref = char_attrs[idx]
+                if new_runs and new_runs[-1]['bold'] == bold and new_runs[-1]['footnote_ref'] == fn_ref:
+                    new_runs[-1] = {**new_runs[-1], 'text': new_runs[-1]['text'] + ch}
+                else:
+                    new_runs.append({'text': ch, 'bold': bold, 'footnote_ref': fn_ref})
+            runs_data = new_runs
+        para_text = cleaned
 
         if not para_text.strip():
             continue
